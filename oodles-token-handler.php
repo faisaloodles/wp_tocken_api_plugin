@@ -172,16 +172,18 @@ add_action('refresh_access_token_event', 'refresh_access_token');
 /// Function to make authenticated API request
 function api_get_franchise() {
     
-    $api_url = OODLES_API_BASEURL.'api/getfranchise';
+    $api_url = OODLES_API_BASEURL . 'api/getfranchise';
     //$api_url = 'http://127.0.0.1:8000/api/getfranchise'; // Replace with your API endpoint
 
     $access_token = get_access_token();
-    
 
     if (!$access_token) {
-        // Handle error: Unable to retrieve access token
+        // Log the error
         error_log('No Access token to get franchise');
-        return;
+        // Return JSON error response
+        return wp_send_json_error(array(
+            'message' => 'No Access token to get franchise',
+        ), 401);
     }
 
     $response = wp_remote_get($api_url, array(
@@ -189,35 +191,34 @@ function api_get_franchise() {
             'Authorization' => 'Bearer ' . $access_token,
         ),
     ));
-    
-    
 
     if (is_wp_error($response)) {
-        error_log('API Request Error: ' . $response->get_error_message());
-        // Optionally, you can log more details such as error codes or additional data:
-        // error_log('API Request Error Details: ' . print_r($response, true));
-        return;
+        $error_message = $response->get_error_message();
+        error_log('API Request Error: ' . $error_message);
+
+        return wp_send_json_error(array(
+            'message' => 'API Request Error',
+            'error' => $error_message,
+        ), 500);
     }
-    //$response['body']['access_token'] = $access_token;
+
     $body = wp_remote_retrieve_body($response);
-    //$access_token= array('access_token' => $access_token);
     $data = json_decode($body, true);
 
-     // Check if the data is valid.
-     if (json_last_error() !== JSON_ERROR_NONE) {
-        return wp_send_json_error('The API response is not a valid JSON.');
-    }
-
-
-    //$data ['access_token']=$access_token;
+    // Check if the response is valid JSON
+    // if (json_last_error() !== JSON_ERROR_NONE) {
+    //     error_log('Invalid JSON response from API');
+    //     return wp_send_json_error(array(
+    //         'message' => 'Invalid JSON response from API',
+    //     ), 500);
+    // }
 
     $response_data = array(
         'data' => $data,
         'access_token' => $access_token
     );
-    //$body = array_merge($access_token, $body);
-    
-    return wp_send_json_success( $response_data);
+
+    return wp_send_json_success($response_data);
 }
 
 
