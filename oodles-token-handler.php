@@ -16,6 +16,8 @@ require_once plugin_dir_path(__FILE__) . 'settings-page.php';
 define('OODLES_API_BASEURL', get_option('OODLES_API_BASEURL'));
 define('OODLES_CLIENT_ID', get_option('OODLES_CLIENT_ID'));
 define('OODLES_CLIENT_SECRET', get_option('OODLES_CLIENT_SECRET'));
+define('OODLES_LIST_ID', get_option('OODLES_LIST_ID'));
+define('SUBSCRIPTION_REDIRECT_URL', get_option('SUBSCRIPTION_REDIRECT_URL'));
 
 // Add a "Settings" link to the plugin actions in the plugin list
 function oodles_token_handler_plugin_action_links($links) {
@@ -42,6 +44,8 @@ function oodles_token_handler_register_settings() {
     register_setting('oodles_token_handler_settings_group', 'OODLES_API_BASEURL');
     register_setting('oodles_token_handler_settings_group', 'OODLES_CLIENT_ID');
     register_setting('oodles_token_handler_settings_group', 'OODLES_CLIENT_SECRET');
+    register_setting('oodles_token_handler_settings_group', 'OODLES_LIST_ID');
+    register_setting('oodles_token_handler_settings_group', 'SUBSCRIPTION_REDIRECT_URL');
 
     // Add settings section
     add_settings_section(
@@ -87,6 +91,29 @@ function oodles_token_handler_register_settings() {
             'name' => 'OODLES_CLIENT_SECRET'
         )
     );
+    add_settings_field(
+        'oodles_list_id',
+        'List ID',
+        'oodles_token_handler_text_field_callback',
+        'oodles_token_handler_settings',
+        'oodles_token_handler_section',
+        array(
+            'label_for' => 'OODLES_LIST_ID',
+            'name' => 'OODLES_LIST_ID'
+        )
+    );
+    add_settings_field(
+        'subscription_redirect_url',
+        'Redirect Url',
+        'oodles_token_handler_text_field_callback',
+        'oodles_token_handler_settings',
+        'oodles_token_handler_section',
+        array(
+            'label_for' => 'SUBSCRIPTION_REDIRECT_URL',
+            'name' => 'SUBSCRIPTION_REDIRECT_URL'
+        )
+    );
+    
 }
 add_action('admin_init', 'oodles_token_handler_register_settings');
 
@@ -267,3 +294,145 @@ function enqueue_custom_scripts() {
     ));
 }
 add_action('wp_enqueue_scripts', 'enqueue_custom_scripts');
+
+// AJAX handler for subscription form// AJAX handler for subscription form
+function oodles_subscribe_user() {
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'custom-ajax-nonce')) {
+        wp_send_json_error('Invalid nonce');
+        wp_die();
+    }
+
+    $email = sanitize_email($_POST['email']);
+    if (!is_email($email)) {
+        wp_send_json_error('Invalid email address');
+        wp_die();
+    }
+
+    $list_id = OODLES_LIST_ID; // Retrieve list ID from settings
+    $redirecturl = SUBSCRIPTION_REDIRECT_URL; // Retrieve list ID from settings
+    if (empty($list_id)) {
+        wp_send_json_error('List ID is not configured.');
+        wp_die();
+    }
+
+    $api_url = OODLES_API_BASEURL . 'api/newsletter-subscribe';
+    $access_token = get_access_token();
+
+    $response = wp_remote_post($api_url, array(
+        'headers' => array(
+            'Authorization' => 'Bearer ' . $access_token,
+            'Content-Type' => 'application/json'
+        ),
+        'body' => json_encode(array(
+            'email' => $email,
+            'listIds' => $list_id,  // Sending List ID to CRM
+            'redirecturl' => $redirecturl  // Sending redirect URL to CRM
+        ))
+    ));
+
+    if (is_wp_error($response)) {
+        wp_send_json_error('API request failed');
+    } else {
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+    
+        if (!$data || !is_array($data)) {
+            wp_send_json_error('Invalid API response');
+        }
+    
+        if (isset($data['message'])) {
+            if ($data['message'] == 'Email already exists') {
+                wp_send_json_error('Email already exists.');
+            } elseif ($data['message'] == 'Subscription successful') {
+                wp_send_json_success('Subscription successful! Please check your email for confirmation.');
+            } else {
+                wp_send_json_error('Subscription failed.');
+            }
+        } else {
+            wp_send_json_error('Unexpected API response.');
+        }
+    }
+    wp_die();
+}
+add_action('wp_ajax_oodles_subscribe', 'oodles_subscribe_user');
+add_action('wp_ajax_nopriv_oodles_subscribe', 'oodles_subscribe_user');
+
+
+// Shortcode for subscription form
+function oodles_subscribe_form() {
+    ob_start(); ?>
+    <form id="oodles-subscribe-form">
+        <input type="email" id="oodles-email" name="email" placeholder="Enter your email address" required>
+        <div class="sbbtn">
+        <input type="submit" class="sib-default-btn" value="Subscribe" fdprocessedid="dfilf">
+        </div>
+        
+        <style>
+            #oodles-response.success {
+                background: green;
+                color: white;
+            }
+            #oodles-response.error {
+                background: red;
+                color: white;
+            }
+            #oodles-response {
+                padding: 10px;
+                border-radius: 10px;
+                text-align: center;
+                font-weight: bold;
+            }
+            #oodles-subscribe-form {
+                display: flex;
+            }
+            #oodles-email {
+                margin-bottom: 10px;
+                padding: 5px;
+            }
+            #oodles-response {
+                margin-top: 10px;
+            }
+        </style>
+        </form>
+        <p id="oodles-response"></p>
+    <script>
+        jQuery(document).ready(function($) {
+            $('#oodles-subscribe-form').submit(function(e) {
+                e.preventDefault();
+                var email = $('#oodles-email').val();
+                $.ajax({
+                    type: 'POST',
+                    url: customAjax.ajaxurl,
+                    data: {
+                        action: 'oodles_subscribe',
+                        email: email,
+                        nonce: customAjax.nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#oodles-response').addClass('success').text(response.data);
+                        } else {
+                            $('#oodles-response').addClass('error').text(response.data);
+                        }
+                        setTimeout(function() {
+                            $('#oodles-response').fadeOut('slow', function() {
+                                $(this).removeClass('success error').text('').show();
+                            });
+                        }, 10000);
+                    },
+                    error: function(response) {
+                        $('#oodles-response').addClass('error');
+                        $('#oodles-response').text(response.data);
+                        setTimeout(function() {
+                            $('#oodles-response').fadeOut('slow', function() {
+                                $(this).removeClass('error').text('').show();
+                            });
+                        }, 10000);
+                    }
+                });
+            });
+        });
+    </script>
+    <?php return ob_get_clean();
+}
+add_shortcode('oodles_subscribe', 'oodles_subscribe_form');
