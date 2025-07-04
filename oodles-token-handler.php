@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Oodles Token Handler
  * Description: Handles storing and refreshing the access token.
- * Version: 1.0
+ * Version: 1.1
  * Author: M Faisal Siddiqui
  */
 
@@ -17,7 +17,6 @@ define('OODLES_API_BASEURL', get_option('OODLES_API_BASEURL'));
 define('OODLES_CLIENT_ID', get_option('OODLES_CLIENT_ID'));
 define('OODLES_CLIENT_SECRET', get_option('OODLES_CLIENT_SECRET'));
 define('OODLES_LIST_ID', get_option('OODLES_LIST_ID'));
-define('SUBSCRIPTION_REDIRECT_URL', get_option('SUBSCRIPTION_REDIRECT_URL'));
 
 // Add a "Settings" link to the plugin actions in the plugin list
 function oodles_token_handler_plugin_action_links($links) {
@@ -45,7 +44,6 @@ function oodles_token_handler_register_settings() {
     register_setting('oodles_token_handler_settings_group', 'OODLES_CLIENT_ID');
     register_setting('oodles_token_handler_settings_group', 'OODLES_CLIENT_SECRET');
     register_setting('oodles_token_handler_settings_group', 'OODLES_LIST_ID');
-    register_setting('oodles_token_handler_settings_group', 'SUBSCRIPTION_REDIRECT_URL');
 
     // Add settings section
     add_settings_section(
@@ -102,17 +100,7 @@ function oodles_token_handler_register_settings() {
             'name' => 'OODLES_LIST_ID'
         )
     );
-    add_settings_field(
-        'subscription_redirect_url',
-        'Redirect Url',
-        'oodles_token_handler_text_field_callback',
-        'oodles_token_handler_settings',
-        'oodles_token_handler_section',
-        array(
-            'label_for' => 'SUBSCRIPTION_REDIRECT_URL',
-            'name' => 'SUBSCRIPTION_REDIRECT_URL'
-        )
-    );
+   
     
 }
 add_action('admin_init', 'oodles_token_handler_register_settings');
@@ -309,7 +297,7 @@ function oodles_subscribe_user() {
     }
 
     $list_id = OODLES_LIST_ID; // Retrieve list ID from settings
-    $redirecturl = SUBSCRIPTION_REDIRECT_URL; // Retrieve list ID from settings
+   // $redirecturl = SUBSCRIPTION_REDIRECT_URL; // Retrieve list ID from settings
     if (empty($list_id)) {
         wp_send_json_error('List ID is not configured.');
         wp_die();
@@ -326,7 +314,6 @@ function oodles_subscribe_user() {
         'body' => json_encode(array(
             'email' => $email,
             'listIds' => $list_id,  // Sending List ID to CRM
-            'redirecturl' => $redirecturl  // Sending redirect URL to CRM
         ))
     ));
 
